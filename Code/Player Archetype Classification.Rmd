@@ -1,0 +1,455 @@
+---
+title: "Player Analysis: Clustering and Regression"
+author: "Tirdod Behbehani"
+date: "19.12.2024"
+format: 
+  pdf:
+    keep-tex: true
+    include-in-header: 
+       text: |
+         \usepackage{fvextra}
+         \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+         \DefineVerbatimEnvironment{OutputCode}{Verbatim}{breaklines,commandchars=\\\{\}}
+---
+
+# 1. Introduction
+This document explores player data using K-means clustering and PCA to understand if there is any structure in the data that can inform market value predictions. 
+
+---
+
+# Data Import and Preparation
+
+## Load Required Libraries
+```{r setup, include=TRUE}
+# Load libraries
+library(tidyverse)    # Data manipulation and visualization
+library(cluster)      # Clustering algorithms
+library(factoextra)   # Visualization for clustering
+library(broom)        # Tidy model outputs
+library(knitr)        # Pretty tables
+library(dplyr)
+library(gridExtra) # multiple plotting with ggplot2
+library(mclust) # clustering with mixture model
+library(gclus) # Clustering Graphics package
+library(car)
+library(corrplot)      # Install corrplot if not already installed
+library(ggcorrplot)    # Install ggcorrplot if not already installed
+library(elasticnet)
+library(PMA)
+library(cowplot)
+library(caret)
+```
+
+## Import data
+```{r}
+
+#Import training data
+X_train_totals <- read_csv('train_test_data/X_train_totals.csv')[ , -1]
+y_train_totals <- read_csv('train_test_data/y_train_totals.csv')[ , -1]
+
+X_train_90s <- read_csv('train_test_data/X_train_90s.csv')[ , -1]
+y_train_90s <- read_csv('train_test_data/y_train_90s.csv')[ , -1]
+
+#Import testing data
+X_test_totals <- read_csv('train_test_data/X_train_totals.csv')[ , -1]
+y_test_totals <- read_csv('train_test_data/y_train_totals.csv')[ , -1]
+
+X_test_90s <- read_csv('train_test_data/X_test_90s.csv')[ , -1]
+y_test_90s <- read_csv('train_test_data/y_test_90s.csv')[ , -1]
+
+
+```
+
+## Scale data
+
+```{r}
+
+# Preprocess the training data
+preProc_90s <- preProcess(X_train_90s, method = c("center", "scale"))
+X_train_90s_scaled <- predict(preProc_90s, X_train_90s)
+X_test_90s_scaled <- predict(preProc_90s, X_test_90s)
+
+preProc_totals <- preProcess(X_train_totals, method = c("center", "scale"))
+X_train_totals_scaled <- predict(preProc_totals, X_train_totals)
+X_test_totals_scaled <- predict(preProc_totals, X_test_totals)
+
+# Confirm scaling
+summary(X_train_90s_scaled)
+summary(X_test_90s_scaled)
+```
+
+## Examine highly correlated variables (for the totals)
+```{r}
+# Compute the correlation matrix (for totals)
+cor_matrix <- cor(X_train_totals, use = "complete.obs")  
+
+# Find highly correlated pairs (threshold = 0.8)
+threshold <- 0.75
+high_cor_pairs <- which(abs(cor_matrix) > threshold, arr.ind = TRUE)
+
+# Exclude self-correlations (correlation of a variable with itself)
+high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
+
+# Create a df of highly correlated pairs
+high_cor_df <- data.frame(
+  Var1 = rownames(cor_matrix)[high_cor_pairs[, 1]],
+  Var2 = colnames(cor_matrix)[high_cor_pairs[, 2]],
+  Correlation = cor_matrix[high_cor_pairs]
+)
+
+# Remove duplicate pairs 
+high_cor_df <- high_cor_df[!duplicated(t(apply(high_cor_df, 1, sort))), ]
+
+high_cor_df <- high_cor_df[order(-high_cor_df$Correlation), ]
+
+# Print the highly correlated pairs
+print("Highly Correlated Pairs:")
+print(high_cor_df)
+
+# Visualize the correlation matrix
+corrplot(cor_matrix, method = "circle", type = "upper", tl.col = "black", tl.srt = 45)
+```
+
+## K-Means Clustering (Train)
+```{r}
+set.seed(28)
+
+k2_totals <- kmeans(X_train_totals_scaled, centers = 2, nstart = 25)
+k3_totals <- kmeans(X_train_totals_scaled, centers = 3, nstart = 25)
+k4_totals <- kmeans(X_train_totals_scaled, centers = 4, nstart = 25)
+k5_totals <- kmeans(X_train_totals_scaled, centers = 5, nstart = 25)
+
+k2_90s <- kmeans(X_train_90s_scaled, centers = 2, nstart = 25)
+k3_90s <- kmeans(X_train_90s_scaled, centers = 3, nstart = 25)
+k4_90s <- kmeans(X_train_90s_scaled, centers = 4, nstart = 25)
+k5_90s <- kmeans(X_train_90s_scaled, centers = 5, nstart = 25)
+
+```
+
+## Look at K-Means Plots (Train)
+```{r}
+# plots to compare
+p1 <- fviz_cluster(k2_totals, geom = "point", data = X_train_totals_scaled) + ggtitle("Totals: k = 2")
+p2 <- fviz_cluster(k2_90s, geom = "point", data = X_train_90s_scaled) + ggtitle("Per 90s: k = 2")
+
+p3 <- fviz_cluster(k3_totals, geom = "point",  data = X_train_totals_scaled) + ggtitle("Totals: k = 3")
+p4 <- fviz_cluster(k3_90s, geom = "point",  data = X_train_90s_scaled) + ggtitle("Per 90s: k = 3")
+
+p5 <- fviz_cluster(k4_totals, geom = "point",  data = X_train_totals_scaled) + ggtitle("Totals:k = 4")
+p6 <- fviz_cluster(k4_90s, geom = "point",  data = X_train_90s_scaled) + ggtitle("Per 90s:k = 4")
+
+p7 <- fviz_cluster(k5_totals, geom = "point",  data = X_train_totals_scaled) + ggtitle("Totals:k = 5")
+p8 <- fviz_cluster(k5_90s, geom = "point",  data = X_train_90s_scaled) + ggtitle("Per 90s: = 5")
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, nrow = 4)
+```
+
+## Compute and View ELBOW (Train)
+```{r}
+
+# Compute WCSS for Totals
+wss_totals <- function(k) {
+  kmeans(X_train_totals_scaled, k, nstart = 10)$tot.withinss
+}
+k.values <- 1:15
+wss_totals_values <- map_dbl(k.values, wss_totals)
+wss_totals_df <- data.frame(k = k.values, wss = wss_totals_values)
+
+# Compute WCSS for Per 90s
+wss_90s <- function(k) {
+  kmeans(X_train_90s_scaled, k, nstart = 10)$tot.withinss
+}
+wss_90s_values <- map_dbl(k.values, wss_90s)
+wss_90s_df <- data.frame(k = k.values, wss = wss_90s_values)
+
+# Totals Plot
+plot_totals <- ggplot(wss_totals_df, aes(x = k, y = wss)) +
+  geom_point(size = 3, color = "blue") +  # Larger blue points
+  geom_line(color = "blue", size = 1) +  # Blue line
+  geom_text(aes(label = k), nudge_y = 2000, size = 3, color = "black") +  # Add k labels
+  xlab("Number of Clusters (K)") +
+  ylab("Total Within-Cluster Sum of Squares (WCSS)") +
+  ggtitle("Totals: Elbow Method") +
+  theme_minimal() +  # Minimal theme
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Centered bold title
+    axis.title = element_text(size = 12, face = "bold"),  # Bold axis titles
+    axis.text = element_text(size = 10),  # Larger axis text
+    panel.grid.major = element_line(color = "gray80"),  # Minor grid lines
+    panel.grid.minor = element_line(color = "gray90", size = 0.5)  # Minor grid lines
+  )
+
+# Per 90s Plot
+plot_90s <- ggplot(wss_90s_df, aes(x = k, y = wss)) +
+  geom_point(size = 3, color = "darkred") +  # Larger red points
+  geom_line(color = "darkred", size = 1) +  # Red line
+  geom_text(aes(label = k), nudge_y = 2000, size = 3, color = "black") +  # Add k labels
+  xlab("Number of Clusters (K)") +
+  ylab("Total Within-Cluster Sum of Squares (WCSS)") +
+  ggtitle("Per 90s: Elbow Method") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Centered bold title
+    axis.title = element_text(size = 12, face = "bold"),  # Bold axis titles
+    axis.text = element_text(size = 10),  # Larger axis text
+    panel.grid.major = element_line(color = "gray80"),  # Minor grid lines
+    panel.grid.minor = element_line(color = "gray90", size = 0.5)  # Minor grid lines
+  )
+
+# Arrange Plots Side by Side
+plot_grid(plot_totals, plot_90s, ncol = 2, align = "h", rel_widths = c(1, 1))
+```
+
+## PCA
+```{r}
+
+# Perform PCA
+pca_totals <- prcomp(X_train_totals_scaled, scale. = TRUE)
+
+# Extract explained variance
+explained_variance <- summary(pca_totals)$importance[2, ]  # Proportion of variance
+cumulative_variance <- cumsum(explained_variance)  # Cumulative variance
+
+# Find the number of components for each threshold
+components_70 <- which(cumulative_variance >= 0.70)[1]  # First component where >= 70%
+components_80 <- which(cumulative_variance >= 0.80)[1]  # First component where >= 80%
+components_90 <- which(cumulative_variance >= 0.90)[1]  # First component where >= 90%
+
+# Print results
+cat("Number of components to explain:\n")
+cat("70% variance:", components_70, "\n")
+cat("80% variance:", components_80, "\n")
+cat("90% variance:", components_90, "\n")
+
+# Create a data frame for plotting
+variance_df <- data.frame(
+  Component = 1:length(cumulative_variance),
+  CumulativeVariance = cumulative_variance
+)
+
+plot_variance <- ggplot(variance_df, aes(x = Component, y = CumulativeVariance)) +
+  geom_line(color = "steelblue", size = 1) +  # Line for cumulative variance
+  geom_point(size = 3, color = "steelblue") +  # Points for each component
+  geom_hline(yintercept = c(0.7, 0.8, 0.9), linetype = "dashed", color = "red") +  # Horizontal thresholds
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1),  # Major y-axis ticks every 10%
+                     minor_breaks = seq(0.05, 1, by = 0.1),  # Minor y-axis ticks at 5%, 15%, 25%, ...
+                     labels = scales::percent_format(accuracy = 1)) +  # Format y-axis as percentages
+  scale_x_continuous(breaks = seq(0, max(variance_df$Component), by = 5),  # Major x-axis ticks every 5 components
+                     minor_breaks = seq(0, max(variance_df$Component), by = 1)) +  # Minor x-axis ticks every component
+  xlab("Number of Principal Components") +
+  ylab("Cumulative Explained Variance (%)") +
+  ggtitle("Cumulative Explained Variance by PCA") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    panel.grid.major.x = element_line(color = "gray50", size = 0.4),  # Stronger grid lines for major x ticks
+    panel.grid.minor.x = element_line(color = "gray80", size = 0.2),  # Lighter grid lines for minor x ticks
+    panel.grid.major.y = element_line(color = "gray50", size = 0.4),  # Stronger grid lines for major y ticks
+    panel.grid.minor.y = element_line(color = "gray80", size = 0.2)   # Lighter grid lines for minor y ticks
+  )
+
+# Display plot
+print(plot_variance)
+
+```
+
+## Look at most important principal components
+```{r}
+# Extract PCA loadings (rotation matrix)
+loadings <- pca_totals$rotation
+
+# View the loadings for the first principal component (PC1)
+cat("Loadings for PC1:\n")
+print(loadings[, 1])
+
+# Find the variables with the highest and lowest loadings for PC1
+most_important_vars <- names(sort(abs(loadings[, 1]), decreasing = TRUE)[1:5])
+least_important_vars <- names(sort(abs(loadings[, 1]), decreasing = FALSE)[1:5])
+
+cat("Most important variables (PC1):", most_important_vars, "\n")
+cat("Least important variables (PC1):", least_important_vars, "\n")
+
+```
+
+## Sparse PCA (with L1 Penalty)
+```{r}
+
+# Use the training dataset directly
+X <- as.matrix(X_train_totals_scaled)  # Training data (no further splitting)
+
+# Hyperparameter grids
+K_values <- c(1:10)  # Number of components to test
+lambda_values <- seq(0.05, 0.2, by = 0.05)  # Sparsity penalty values
+
+# A function to compute explained variance ratio
+explained_variance_ratio <- function(X_original_centered, loadings, scores) {
+  X_reconstructed <- scores %*% t(loadings)
+  
+  # Compute the variance explained by reconstructed data
+  var_explained <- sum(apply(X_reconstructed, 2, var))
+  
+  # Compute the total variance in the original centered data
+  var_total <- sum(apply(X_original_centered, 2, var))
+  
+  # Return the ratio of explained variance
+  var_explained / var_total
+}
+
+# Center the training dataset
+train_mean <- colMeans(X)
+X_centered <- sweep(X, 2, train_mean, FUN = "-")
+
+# Compute the covariance matrix of the centered training data
+cov_matrix <- cov(X_centered)
+
+# Loop over hyperparameter combinations
+results <- data.frame(K = integer(), lambda = numeric(), ev_ratio = numeric())
+
+for (K in K_values) {
+  for (lambda in lambda_values) {
+    # Fit Sparse PCA using the covariance matrix
+    fit <- spca(cov_matrix, K = K, type = "Gram", sparse = "penalty", para = rep(lambda, K))
+    
+    loadings <- fit$loadings
+    scores <- X_centered %*% loadings  # Scores for the training set
+
+    # Compute explained variance ratio
+    ev <- explained_variance_ratio(X_centered, loadings, scores)
+    
+    # Store the results
+    results <- rbind(results, data.frame(K = K, lambda = lambda, ev_ratio = ev))
+  }
+}
+
+# Find the best (K, lambda) based on the highest explained variance
+best_params <- results[which.max(results$ev_ratio), ]
+print(best_params)
+
+```
+
+## Sparse PCA
+```{r}
+
+lambda <- 0.05
+
+max_vars <- ncol(X_centered)
+
+ev_ratios <- numeric(max_vars)
+
+for (K in 1:max_vars) {
+  fit <- spca(cov_matrix, K = K, type = "Gram", sparse = "penalty", para = rep(lambda, K))
+  loadings <- fit$loadings
+  scores <- X_centered %*% loadings
+  
+  # Compute explained variance ratio
+  X_reconstructed <- scores %*% t(loadings)
+  var_explained <- sum(apply(X_reconstructed, 2, var))
+  var_total <- sum(apply(X_centered, 2, var))
+  
+  ev_ratio <- var_explained / var_total
+  ev_ratios[K] <- ev_ratio
+  
+  # If we reach or exceed 100% (or very close), break out
+  if (ev_ratio >= 1) {
+    break
+  }
+}
+
+# Filter out any trailing zeros if we broke early
+ev_ratios <- ev_ratios[ev_ratios > 0]
+
+# Create a data frame for plotting
+df <- data.frame(
+  K = 1:length(ev_ratios),
+  ev_pct = ev_ratios * 100
+)
+
+ggplot(df, aes(x = K, y = ev_pct)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_point(size = 3, color = "steelblue") +
+  # Add dashed lines at 70%, 80%, 90% for reference
+  geom_hline(yintercept = c(70,80,90), linetype = "dashed", color = "red") +
+  annotate("text", x = max(df$K) + 0.3, y = 70, label = "70%", vjust = -0.5, color = "red") +
+  annotate("text", x = max(df$K) + 0.3, y = 80, label = "80%", vjust = -0.5, color = "red") +
+  annotate("text", x = max(df$K) + 0.3, y = 90, label = "90%", vjust = -0.5, color = "red") +
+  scale_x_continuous(breaks = seq(1, max(df$K), by = 1)) +
+  scale_y_continuous(limits = c(0,100)) +
+  labs(
+    x = "Number of Components (K)",
+    y = "Cumulative Explained Variance (%)",
+    title = sprintf("Cumulative Explained Variance by Sparse PCA (lambda = %.2f)", lambda)
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title = element_text(size = 11, face = "bold"),
+    axis.text = element_text(size = 10)
+  )
+```
+
+
+## Analyze the principal component features
+```{r}
+# Extract loadings for the first 10 principal components
+loadings <- fit$loadings  # Loadings from Sparse PCA
+loadings_df <- as.data.frame(loadings[, 1:10])  # Select PC1 to PC10
+colnames(loadings_df) <- c("PC1", "PC2", "PC3", "PC4", "PC5",
+                           "PC6", "PC7", "PC8", "PC9", "PC10")  # Rename columns for clarity
+
+# Add variable names for easier interpretation
+loadings_df$Variable <- rownames(loadings)
+
+# Function to get top variables for a given principal component
+get_top_variables <- function(component, num_top = 5) {
+  sorted_loadings <- loadings_df[order(abs(loadings_df[[component]]), decreasing = TRUE), ]
+  sorted_loadings[1:num_top, c("Variable", component)]
+}
+
+# Extract top contributors for each PC
+top_PC1 <- get_top_variables("PC1", 10)
+top_PC2 <- get_top_variables("PC2", 10)
+top_PC3 <- get_top_variables("PC3", 10)
+top_PC4 <- get_top_variables("PC4", 10)
+top_PC5 <- get_top_variables("PC5", 10)
+top_PC6 <- get_top_variables("PC6", 10)
+top_PC7 <- get_top_variables("PC7", 10)
+top_PC8 <- get_top_variables("PC8", 10)
+top_PC9 <- get_top_variables("PC9", 10)
+top_PC10 <- get_top_variables("PC10", 10)
+
+# Print results
+cat("Top variables for PC1:\n")
+print(top_PC1)
+
+cat("\nTop variables for PC2:\n")
+print(top_PC2)
+
+cat("\nTop variables for PC3:\n")
+print(top_PC3)
+
+cat("\nTop variables for PC4:\n")
+print(top_PC4)
+
+cat("\nTop variables for PC5:\n")
+print(top_PC5)
+
+# Print results
+cat("Top variables for PC6:\n")
+print(top_PC6)
+
+cat("\nTop variables for PC7:\n")
+print(top_PC7)
+
+cat("\nTop variables for PC8:\n")
+print(top_PC8)
+
+cat("\nTop variables for PC9:\n")
+print(top_PC9)
+
+cat("\nTop variables for PC10:\n")
+print(top_PC10)
+
+```

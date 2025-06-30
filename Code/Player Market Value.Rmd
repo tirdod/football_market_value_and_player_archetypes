@@ -1,0 +1,640 @@
+---
+title: "Player Analysis: Clustering and Regression"
+author: "Timothy Cassel, Tirdod Behbehani"
+date: "19.12.2024"
+format: 
+  pdf:
+    keep-tex: true
+    include-in-header: 
+       text: |
+         \usepackage{fvextra}
+         \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+         \DefineVerbatimEnvironment{OutputCode}{Verbatim}{breaklines,commandchars=\\\{\}}
+---
+
+
+# Introduction
+
+This document explores player data and runs various regression analyses (OLS, Ridge, Lasso, Elastic Net) to understand the factors influencing player market values. Additionally, model performance is evaluated using metrics such as RMSE, R², and BIC.
+
+# Data Import and Preparation
+
+## Load Required Libraries
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(
+  tidy = TRUE,      # Clean up code output
+  tidy.opts = list(width.cutoff = 50), # Wrap code output at 60 characters
+  comment = NA      # Remove comments from code output
+)
+
+rm(list=ls())
+
+# Load libraries
+library(tidyverse)    # Data manipulation and visualization
+library(factoextra)   # Visualization for clustering
+library(broom)        # Tidy model outputs
+library(knitr)        # Pretty tables
+library(dplyr)
+library(glmnet)
+library(caret)
+library(ggplot2)
+library(gridExtra)
+# remotes::install_github("emilhvitfeldt/extrasteps")
+library(recipes)
+library(extrasteps)
+library(modeldata)
+
+```
+
+
+
+## Import data 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+# Load the prepared datasets - 90s 
+X_train_90s <- read_csv("train_test_data/X_train_90s.csv", show_col_types = FALSE)[,-1]
+y_train_90s <- as.numeric(unlist(read_csv("train_test_data/y_train_90s.csv", show_col_types = FALSE)[,-1]))
+
+X_test_90s <- read_csv("train_test_data/X_test_90s.csv", show_col_types = FALSE)[,-1]
+y_test_90s <- as.numeric(unlist(read_csv("train_test_data/y_test_90s.csv", show_col_types = FALSE)[,-1]))
+
+# Load the prepared datasets - totals
+X_train_totals <- read_csv("train_test_data/X_train_totals.csv", show_col_types = FALSE)[,-1]
+y_train_totals <- as.numeric(unlist(read_csv("train_test_data/y_train_totals.csv", show_col_types = FALSE)[,-1]))
+
+X_test_totals <- read_csv("train_test_data/X_test_totals.csv", show_col_types = FALSE)[,-1]
+y_test_totals <- as.numeric(unlist(read_csv("train_test_data/y_test_totals.csv", show_col_types = FALSE)[,-1]))
+
+# Replace dashes with underscores in column names for consistency
+colnames(X_train_90s) <- gsub("-", "_", colnames(X_train_90s))
+colnames(X_test_90s) <- gsub("-", "_", colnames(X_test_90s))
+colnames(X_train_totals) <- gsub("-", "_", colnames(X_train_totals))
+colnames(X_test_totals) <- gsub("-", "_", colnames(X_test_totals))
+
+# Log-transform the target variables
+y_train_totals_log <- log(y_train_totals)
+y_test_totals_log <- log(y_test_totals)
+
+y_train_90s_log <- log(y_train_90s)
+y_test_90s_log <- log(y_test_90s)
+
+# Preprocess (Center & Scale) the training data
+preProc_90s <- preProcess(X_train_90s, method = c("center", "scale"))
+X_train_90s_scaled <- predict(preProc_90s, X_train_90s)
+X_test_90s_scaled <- predict(preProc_90s, X_test_90s)
+
+preProc_totals <- preProcess(X_train_totals, method = c("center", "scale"))
+X_train_totals_scaled <- predict(preProc_totals, X_train_totals)
+X_test_totals_scaled <- predict(preProc_totals, X_test_totals)
+
+# Try robust scaling 
+# Define the recipe for robust scaling (90s dataset)
+#recipe_90s <- recipe(~ ., data = X_train_90s) |>
+#  step_robust(all_predictors(), range = c(0.1, 0.9)) |>
+#  prep()
+
+# Apply the recipe to scale the training and test data (90s dataset)
+#X_train_90s_scaled <- bake(recipe_90s, new_data = X_train_90s)
+#X_test_90s_scaled <- bake(recipe_90s, new_data = X_test_90s)
+
+# Define the recipe for robust scaling (Totals dataset)
+#recipe_totals <- recipe(~ ., data = X_train_totals) |>
+#  step_robust(all_predictors(), range = c(0.1, 0.9)) |>
+#  prep()
+
+# Apply the recipe to scale the training and test data (Totals dataset)
+#X_train_totals_scaled <- bake(recipe_totals, new_data = X_train_totals)
+#X_test_totals_scaled <- bake(recipe_totals, new_data = X_test_totals)
+
+
+```
+
+## Visualize Distribution of Market Values 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+# Plot the original market values (Totals)
+p1 <- ggplot(data.frame(y = y_train_totals), aes(x = y)) +
+  geom_histogram(binwidth = 1e7, fill = "#4C72B0", alpha = 0.8, color = "white", size = 0.3) +
+  labs(
+    title = "Original Market Values (Totals)",
+    x = "Market Value (in millions)",
+    y = "Frequency"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 16),
+    axis.text = element_text(size = 12),
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"),
+    panel.grid.minor = element_blank()
+  )
+
+# plot thelog-transformed market values (Totals)
+p2 <- ggplot(data.frame(y = y_train_totals_log), aes(x = y)) +
+  geom_histogram(binwidth = 0.1, fill = "#55A868", alpha = 0.8, color = "white", size = 0.3) +
+  labs(
+    title = "Log-Transformed Market Values (Totals)",
+    x = "Log(Market Value)",
+    y = "Frequency"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 16),
+    axis.text = element_text(size = 12),
+    panel.grid.major = element_line(color = "grey80", linetype = "dotted"),
+    panel.grid.minor = element_blank()
+  )
+
+
+# plot next to each other 
+p1 
+p2
+```
+We justify using the log market value as the dependent variable, because the market value is extremely heavily left-skewed. 
+
+
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+#summary stats for original and log-transformed target variables
+
+summary_targets <- data.frame(
+  Dataset = rep(c("Training", "Test"), each = 2),
+  Scale = rep(c("Original", "Log"), times = 2),
+  Mean = c(format(mean(y_train_totals), big.mark = ",", scientific = FALSE), 
+           round(mean(y_train_totals_log), 2),
+           format(mean(y_test_totals), big.mark = ",", scientific = FALSE), 
+           round(mean(y_test_totals_log), 2)),
+  Median = c(format(median(y_train_totals), big.mark = ",", scientific = FALSE), 
+             round(median(y_train_totals_log), 2),
+             format(median(y_test_totals), big.mark = ",", scientific = FALSE), 
+             round(median(y_test_totals_log), 2)),
+  SD = c(format(sd(y_train_totals), big.mark = ",", scientific = FALSE), 
+         round(sd(y_train_totals_log), 2),
+         format(sd(y_test_totals), big.mark = ",", scientific = FALSE), 
+         round(sd(y_test_totals_log), 2)),
+  Min = c(format(min(y_train_totals), big.mark = ",", scientific = FALSE), 
+          round(min(y_train_totals_log), 2),
+          format(min(y_test_totals), big.mark = ",", scientific = FALSE), 
+          round(min(y_test_totals_log), 2)),
+  Max = c(format(max(y_train_totals), big.mark = ",", scientific = FALSE), 
+          round(max(y_train_totals_log), 2),
+          format(max(y_test_totals), big.mark = ",", scientific = FALSE), 
+          round(max(y_test_totals_log), 2))
+)
+
+print(summary_targets)
+
+```
+
+# OLS 
+
+## Fit OLS Model 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+# OLS model on log-transformed totals
+ols_model_totals_log <- lm(y_train_totals_log ~ ., data = data.frame(X_train_totals_scaled, y_train_totals_log))
+summary(ols_model_totals_log)
+
+# OLS model on log-transformed 90s
+ols_model_90s_log <- lm(y_train_90s_log ~ ., data = data.frame(X_train_90s_scaled, y_train_90s_log))
+summary(ols_model_90s_log)
+
+```
+
+
+## Evaluate on test set  - Totals 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+# Predict on test set (totals) in log-space
+ols_preds_totals_log <- predict(ols_model_totals_log, newdata = X_test_totals_scaled)
+
+# Compute evaluation metrics for OLS (totals) in log space
+ols_rmse_totals_log <- sqrt(mean((y_test_totals_log - ols_preds_totals_log)^2))
+ols_r2_totals_log <- 1 - (sum((y_test_totals_log - ols_preds_totals_log)^2) / sum((y_test_totals_log - mean(y_test_totals_log))^2))
+ols_bic_totals_log <- BIC(ols_model_totals_log)
+
+cat("OLS (Totals, Log) Test RMSE:", ols_rmse_totals_log, "\n")
+cat("OLS (Totals, Log) Test R²:", ols_r2_totals_log, "\n")
+cat("OLS (Totals, Log) BIC:", ols_bic_totals_log, "\n")
+
+```
+
+## Evaluate on test set - 90s 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+ols_preds_90s_log <- predict(ols_model_90s_log, newdata = X_test_90s_scaled)
+ols_rmse_90s_log <- sqrt(mean((y_test_90s_log - ols_preds_90s_log)^2))
+ols_r2_90s_log <- 1 - sum((y_test_90s_log - ols_preds_90s_log)^2) / sum((y_test_90s_log - mean(y_test_90s_log))^2)
+ols_bic_90s_log <- BIC(ols_model_90s_log)
+
+cat("OLS (90s, Log) RMSE:", ols_rmse_90s_log, "\n")
+cat("OLS (90s, Log) R²:", ols_r2_90s_log, "\n")
+cat("OLS (90s, Log) BIC:", ols_bic_90s_log, "\n")
+```
+
+
+# Ridge Regression 
+
+## Ridge for totals 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+x_train_mat_totals <- as.matrix(X_train_totals_scaled)
+x_test_mat_totals <- as.matrix(X_test_totals_scaled)
+
+cv_ridge_totals <- cv.glmnet(x_train_mat_totals, y_train_totals_log, alpha = 0, nfolds = 20)
+best_lambda_ridge_totals <- cv_ridge_totals$lambda.min
+cat("Best Ridge (Totals, Log) Lambda:", best_lambda_ridge_totals, "\n")
+
+ridge_model_totals_log <- glmnet(x_train_mat_totals, y_train_totals_log, alpha = 0, lambda = best_lambda_ridge_totals)
+
+# Predictions on test data (log scale)
+ridge_preds_totals_log <- predict(ridge_model_totals_log, x_test_mat_totals)
+ridge_rmse_totals_log <- sqrt(mean((y_test_totals_log - ridge_preds_totals_log)^2))
+ridge_r2_totals_log <- 1 - sum((y_test_totals_log - ridge_preds_totals_log)^2) / sum((y_test_totals_log - mean(y_test_totals_log))^2)
+
+# BIC for Ridge (log)
+ridge_train_preds_totals_log <- predict(ridge_model_totals_log, x_train_mat_totals)
+ridge_rss_totals_log <- sum((y_train_totals_log - ridge_train_preds_totals_log)^2)
+ridge_n_totals_log <- length(y_train_totals_log)
+ridge_coef_count_totals_log <- sum(coef(ridge_model_totals_log) != 0)
+ridge_bic_totals_log <- ridge_n_totals_log * log(ridge_rss_totals_log / ridge_n_totals_log) + ridge_coef_count_totals_log * log(ridge_n_totals_log)
+
+cat("Ridge (Totals, Log) Test RMSE:", ridge_rmse_totals_log, "\n")
+cat("Ridge (Totals, Log) Test R²:", ridge_r2_totals_log, "\n")
+cat("Ridge (Totals, Log) BIC:", ridge_bic_totals_log, "\n")
+
+```
+## Ridge for 90s 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+x_train_mat_90s <- as.matrix(X_train_90s_scaled)
+x_test_mat_90s <- as.matrix(X_test_90s_scaled)
+
+cv_ridge_90s <- cv.glmnet(x_train_mat_90s, y_train_90s_log, alpha = 0, nfolds = 20)
+best_lambda_ridge_90s <- cv_ridge_90s$lambda.min
+ridge_model_90s_log <- glmnet(x_train_mat_90s, y_train_90s_log, alpha = 0, lambda = best_lambda_ridge_90s)
+
+ridge_preds_90s_log <- predict(ridge_model_90s_log, x_test_mat_90s)
+ridge_rmse_90s_log <- sqrt(mean((y_test_90s_log - ridge_preds_90s_log)^2))
+ridge_r2_90s_log <- 1 - sum((y_test_90s_log - ridge_preds_90s_log)^2) / sum((y_test_90s_log - mean(y_test_90s_log))^2)
+
+ridge_train_preds_90s_log <- predict(ridge_model_90s_log, x_train_mat_90s)
+ridge_rss_90s_log <- sum((y_train_90s_log - ridge_train_preds_90s_log)^2)
+ridge_n_90s_log <- length(y_train_90s_log)
+ridge_coef_count_90s_log <- sum(coef(ridge_model_90s_log) != 0)
+ridge_bic_90s_log <- ridge_n_90s_log * log(ridge_rss_90s_log / ridge_n_90s_log) + ridge_coef_count_90s_log * log(ridge_n_90s_log)
+
+cat("Ridge (90s, Log) RMSE:", ridge_rmse_90s_log, "\n")
+cat("Ridge (90s, Log) R²:", ridge_r2_90s_log, "\n")
+cat("Ridge (90s, Log) BIC:", ridge_bic_90s_log, "\n")
+
+```
+
+# Lasso Regression 
+
+## Lasso - Totals 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+cv_lasso_totals <- cv.glmnet(x_train_mat_totals, y_train_totals_log, alpha = 1, nfolds = 20)
+best_lambda_lasso_totals <- cv_lasso_totals$lambda.min
+cat("Best Lambda for Lasso (Totals, Log):", best_lambda_lasso_totals, "\n")
+
+lasso_model_totals_log <- glmnet(x_train_mat_totals, y_train_totals_log, alpha = 1, lambda = best_lambda_lasso_totals)
+
+# Predictions on test data (log scale)
+lasso_preds_totals_log <- predict(lasso_model_totals_log, x_test_mat_totals)
+lasso_rmse_totals_log <- sqrt(mean((y_test_totals_log - lasso_preds_totals_log)^2))
+lasso_r2_totals_log <- 1 - sum((y_test_totals_log - lasso_preds_totals_log)^2) / sum((y_test_totals_log - mean(y_test_totals_log))^2)
+
+# BIC for Lasso (log)
+lasso_train_preds_totals_log <- predict(lasso_model_totals_log, x_train_mat_totals)
+lasso_rss_totals_log <- sum((y_train_totals_log - lasso_train_preds_totals_log)^2)
+lasso_n_totals_log <- length(y_train_totals_log)
+lasso_coef_count_totals_log <- sum(coef(lasso_model_totals_log) != 0)
+lasso_bic_totals_log <- lasso_n_totals_log * log(lasso_rss_totals_log / lasso_n_totals_log) + lasso_coef_count_totals_log * log(lasso_n_totals_log)
+
+cat("Lasso (Totals, Log) Test RMSE:", lasso_rmse_totals_log, "\n")
+cat("Lasso (Totals, Log) Test R²:", lasso_r2_totals_log, "\n")
+cat("Lasso (Totals, Log) BIC:", lasso_bic_totals_log, "\n")
+
+cat("\nLasso Model Coefficients (Non-zero):\n")
+print(coef(lasso_model_totals_log)[coef(lasso_model_totals_log) != 0])
+
+```
+## Lasso - 90s 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+cv_lasso_90s <- cv.glmnet(x_train_mat_90s, y_train_90s_log, alpha = 1, nfolds = 20)
+best_lambda_lasso_90s <- cv_lasso_90s$lambda.min
+lasso_model_90s_log <- glmnet(x_train_mat_90s, y_train_90s_log, alpha = 1, lambda = best_lambda_lasso_90s)
+
+lasso_preds_90s_log <- predict(lasso_model_90s_log, x_test_mat_90s)
+lasso_rmse_90s_log <- sqrt(mean((y_test_90s_log - lasso_preds_90s_log)^2))
+lasso_r2_90s_log <- 1 - sum((y_test_90s_log - lasso_preds_90s_log)^2) / sum((y_test_90s_log - mean(y_test_90s_log))^2)
+
+lasso_train_preds_90s_log <- predict(lasso_model_90s_log, x_train_mat_90s)
+lasso_rss_90s_log <- sum((y_train_90s_log - lasso_train_preds_90s_log)^2)
+lasso_n_90s_log <- length(y_train_90s_log)
+lasso_coef_count_90s_log <- sum(coef(lasso_model_90s_log) != 0)
+lasso_bic_90s_log <- lasso_n_90s_log * log(lasso_rss_90s_log / lasso_n_90s_log) + lasso_coef_count_90s_log * log(lasso_n_90s_log)
+
+cat("Lasso (90s, Log) RMSE:", lasso_rmse_90s_log, "\n")
+cat("Lasso (90s, Log) R²:", lasso_r2_90s_log, "\n")
+cat("Lasso (90s, Log) BIC:", lasso_bic_90s_log, "\n")
+```
+
+# Elastic Net Models 
+## Elastic Net Regression - Totals
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+cv_elnet_totals <- cv.glmnet(x_train_mat_totals, y_train_totals_log, alpha = 0.5, nfolds = 20)
+best_lambda_elnet_totals <- cv_elnet_totals$lambda.min
+elnet_model_totals_log <- glmnet(x_train_mat_totals, y_train_totals_log, alpha = 0.5, lambda = best_lambda_elnet_totals)
+
+elnet_preds_totals_log <- predict(elnet_model_totals_log, x_test_mat_totals)
+elnet_rmse_totals_log <- sqrt(mean((y_test_totals_log - elnet_preds_totals_log)^2))
+elnet_r2_totals_log <- 1 - sum((y_test_totals_log - elnet_preds_totals_log)^2) / sum((y_test_totals_log - mean(y_test_totals_log))^2)
+
+elnet_train_preds_totals_log <- predict(elnet_model_totals_log, x_train_mat_totals)
+elnet_rss_totals_log <- sum((y_train_totals_log - elnet_train_preds_totals_log)^2)
+elnet_n_totals_log <- length(y_train_totals_log)
+elnet_coef_count_totals_log <- sum(coef(elnet_model_totals_log) != 0)
+elnet_bic_totals_log <- elnet_n_totals_log * log(elnet_rss_totals_log / elnet_n_totals_log) + elnet_coef_count_totals_log * log(elnet_n_totals_log)
+
+cat("Elastic Net (Totals, Log) RMSE:", elnet_rmse_totals_log, "\n")
+cat("Elastic Net (Totals, Log) R²:", elnet_r2_totals_log, "\n")
+cat("Elastic Net (Totals, Log) BIC:", elnet_bic_totals_log, "\n")
+
+
+```
+## Elastic Net Regression - 90s
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+cv_elnet_90s <- cv.glmnet(x_train_mat_90s, y_train_90s_log, alpha = 0.5, nfolds = 20)
+best_lambda_elnet_90s <- cv_elnet_90s$lambda.min
+elnet_model_90s_log <- glmnet(x_train_mat_90s, y_train_90s_log, alpha = 0.5, lambda = best_lambda_elnet_90s)
+
+elnet_preds_90s_log <- predict(elnet_model_90s_log, x_test_mat_90s)
+elnet_rmse_90s_log <- sqrt(mean((y_test_90s_log - elnet_preds_90s_log)^2))
+elnet_r2_90s_log <- 1 - sum((y_test_90s_log - elnet_preds_90s_log)^2) / sum((y_test_90s_log - mean(y_test_90s_log))^2)
+
+elnet_train_preds_90s_log <- predict(elnet_model_90s_log, x_train_mat_90s)
+elnet_rss_90s_log <- sum((y_train_90s_log - elnet_train_preds_90s_log)^2)
+elnet_n_90s_log <- length(y_train_90s_log)
+elnet_coef_count_90s_log <- sum(coef(elnet_model_90s_log) != 0)
+elnet_bic_90s_log <- elnet_n_90s_log * log(elnet_rss_90s_log / elnet_n_90s_log) + elnet_coef_count_90s_log * log(elnet_n_90s_log)
+
+cat("Elastic Net (90s, Log) RMSE:", elnet_rmse_90s_log, "\n")
+cat("Elastic Net (90s, Log) R²:", elnet_r2_90s_log, "\n")
+cat("Elastic Net (90s, Log) BIC:", elnet_bic_90s_log, "\n")
+
+```
+
+# Adaptive Lasso Implementtation 
+## Adaptive Lasso - Totals
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+# Fit initial Lasso to get weights
+cv_lasso_totals <- cv.glmnet(x_train_mat_totals, y_train_totals_log, alpha = 1, nfolds = 20)
+best_lambda_lasso_totals <- cv_lasso_totals$lambda.min
+initial_lasso_model_totals <- glmnet(x_train_mat_totals, y_train_totals_log, alpha = 1, lambda = best_lambda_lasso_totals)
+
+# Extract Lasso coefficients
+lasso_coef_totals <- coef(initial_lasso_model_totals)[-1] # Exclude the intercept
+lasso_weights_totals <- 1 / abs(lasso_coef_totals + 1e-5) # Avoid division by zero
+
+# Fit the Adaptive Lasso using Lassos weights
+adaptive_lasso_totals <- cv.glmnet(x_train_mat_totals, y_train_totals_log, 
+                                   alpha = 1, nfolds = 20, penalty.factor = lasso_weights_totals)
+
+best_lambda_adaptive_lasso_totals <- adaptive_lasso_totals$lambda.min
+cat("Best Lambda for Adaptive Lasso (Totals, Log):", best_lambda_adaptive_lasso_totals, "\n")
+
+adaptive_lasso_model_totals_log <- glmnet(x_train_mat_totals, y_train_totals_log, 
+                                          alpha = 1, lambda = best_lambda_adaptive_lasso_totals,
+                                          penalty.factor = lasso_weights_totals)
+
+# Predictions on test data
+adaptive_lasso_preds_totals_log <- predict(adaptive_lasso_model_totals_log, x_test_mat_totals)
+adaptive_lasso_rmse_totals_log <- sqrt(mean((y_test_totals_log - adaptive_lasso_preds_totals_log)^2))
+adaptive_lasso_r2_totals_log <- 1 - sum((y_test_totals_log - adaptive_lasso_preds_totals_log)^2) / sum((y_test_totals_log - mean(y_test_totals_log))^2)
+
+# Calculate BIC for Adaptive Lasso
+adaptive_lasso_train_preds_totals_log <- predict(adaptive_lasso_model_totals_log, x_train_mat_totals)
+adaptive_lasso_rss_totals_log <- sum((y_train_totals_log - adaptive_lasso_train_preds_totals_log)^2)
+adaptive_lasso_n_totals_log <- length(y_train_totals_log)
+adaptive_lasso_coef_count_totals_log <- sum(coef(adaptive_lasso_model_totals_log) != 0) 
+adaptive_lasso_bic_totals_log <- adaptive_lasso_n_totals_log * log(adaptive_lasso_rss_totals_log / adaptive_lasso_n_totals_log) + 
+  adaptive_lasso_coef_count_totals_log * log(adaptive_lasso_n_totals_log)
+
+cat("Adaptive Lasso (Totals, Log) BIC:", adaptive_lasso_bic_totals_log, "\n")
+
+
+cat("Adaptive Lasso (Totals, Log) RMSE:", adaptive_lasso_rmse_totals_log, "\n")
+cat("Adaptive Lasso (Totals, Log) R²:", adaptive_lasso_r2_totals_log, "\n")
+
+print(colnames(x_train_mat_totals))
+cat("\nAdaptive Lasso Coefficients (Non-zero):\n")
+print(coef(adaptive_lasso_model_totals_log)[coef(adaptive_lasso_model_totals_log) != 0][-1])
+```
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+# Retrieve all coefficients including the intercept
+all_coefficients <- coef(adaptive_lasso_model_totals_log)
+
+# Extract the predictor names (exclude the intercept)
+predictor_names <- rownames(all_coefficients)[-1]
+
+# Extract non-zero coefficients (exclude the intercept)
+non_zero_coefficients <- all_coefficients[-1][all_coefficients[-1] != 0]
+
+# Combine predictor names with coefficients
+matched_coefficients <- data.frame(
+  Predictor = predictor_names[all_coefficients[-1] != 0],
+  Coefficient = non_zero_coefficients
+)
+
+print(matched_coefficients)
+```
+
+## Adaptive Lasso  - 90s
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+#Fit initial Lasso model to get weights
+cv_lasso_90s <- cv.glmnet(x_train_mat_90s, y_train_90s_log, alpha = 1, nfolds = 20)
+best_lambda_lasso_90s <- cv_lasso_90s$lambda.min
+initial_lasso_model_90s <- glmnet(x_train_mat_90s, y_train_90s_log, alpha = 1, lambda = best_lambda_lasso_90s)
+
+# Get Lasso coefficients
+lasso_coef_90s <- coef(initial_lasso_model_90s)[-1] # Exclude intercept
+lasso_weights_90s <- 1 / abs(lasso_coef_90s + 1e-5) 
+
+# Step 2: Fit the Adaptive Lasso using Lasso weights
+adaptive_lasso_90s <- cv.glmnet(x_train_mat_90s, y_train_90s_log, 
+                                alpha = 1, nfolds = 20, penalty.factor = lasso_weights_90s)
+
+best_lambda_adaptive_lasso_90s <- adaptive_lasso_90s$lambda.min
+cat("Best Lambda for Adaptive Lasso (90s, Log):", best_lambda_adaptive_lasso_90s, "\n")
+
+adaptive_lasso_model_90s_log <- glmnet(x_train_mat_90s, y_train_90s_log, 
+                                       alpha = 1, lambda = best_lambda_adaptive_lasso_90s,
+                                       penalty.factor = lasso_weights_90s)
+
+# Predictions on test data (log scale)
+adaptive_lasso_preds_90s_log <- predict(adaptive_lasso_model_90s_log, x_test_mat_90s)
+adaptive_lasso_rmse_90s_log <- sqrt(mean((y_test_90s_log - adaptive_lasso_preds_90s_log)^2))
+adaptive_lasso_r2_90s_log <- 1 - sum((y_test_90s_log - adaptive_lasso_preds_90s_log)^2) / sum((y_test_90s_log - mean(y_test_90s_log))^2)
+
+# calc BIC 
+adaptive_lasso_train_preds_90s_log <- predict(adaptive_lasso_model_90s_log, x_train_mat_90s)
+adaptive_lasso_rss_90s_log <- sum((y_train_90s_log - adaptive_lasso_train_preds_90s_log)^2)
+adaptive_lasso_n_90s_log <- length(y_train_90s_log)
+adaptive_lasso_coef_count_90s_log <- sum(coef(adaptive_lasso_model_90s_log) != 0) # Non-zero coefficients, including intercept
+adaptive_lasso_bic_90s_log <- adaptive_lasso_n_90s_log * log(adaptive_lasso_rss_90s_log / adaptive_lasso_n_90s_log) + 
+  adaptive_lasso_coef_count_90s_log * log(adaptive_lasso_n_90s_log)
+
+cat("Adaptive Lasso (90s, Log) BIC:", adaptive_lasso_bic_90s_log, "\n")
+cat("Adaptive Lasso (90s, Log) RMSE:", adaptive_lasso_rmse_90s_log, "\n")
+cat("Adaptive Lasso (90s, Log) R²:", adaptive_lasso_r2_90s_log, "\n")
+
+```
+
+# Comparisons
+## Comparison - Totals 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+comparison_totals <- data.frame(
+  Model = c("OLS (Log)", "Ridge (Log)", "Lasso (Log)", "Elastic Net (Log)", "Adaptive Lasso (Log)"),
+  RMSE_Log = c(ols_rmse_totals_log, ridge_rmse_totals_log, lasso_rmse_totals_log, elnet_rmse_totals_log, adaptive_lasso_rmse_totals_log),
+  R2_Log = c(ols_r2_totals_log, ridge_r2_totals_log, lasso_r2_totals_log, elnet_r2_totals_log, adaptive_lasso_r2_totals_log),
+  BIC_Log = c(ols_bic_totals_log, ridge_bic_totals_log, lasso_bic_totals_log, elnet_bic_totals_log, adaptive_lasso_bic_totals_log)
+)
+
+print(comparison_totals)
+
+```
+
+## Comparison - 90s 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+
+comparison_90s <- data.frame(
+  Model = c("OLS (Log)", "Ridge (Log)", "Lasso (Log)", "Elastic Net (Log)", "Adaptive Lasso (Log)"),
+  RMSE_Log = c(ols_rmse_90s_log, ridge_rmse_90s_log, lasso_rmse_90s_log, elnet_rmse_90s_log, adaptive_lasso_rmse_90s_log),
+  R2_Log = c(ols_r2_90s_log, ridge_r2_90s_log, lasso_r2_90s_log, elnet_r2_90s_log, adaptive_lasso_r2_90s_log),
+  BIC_Log = c(ols_bic_90s_log, ridge_bic_90s_log, lasso_bic_90s_log, elnet_bic_90s_log, adaptive_lasso_bic_90s_log)
+)
+
+print(comparison_90s)
+
+```
+
+## Plots 
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+set.seed(123)
+# Residuals and Fitted for the OLS model
+ols_resid <- resid(ols_model_totals_log)
+ols_fitted <- fitted(ols_model_totals_log)
+
+p_resid_fit <- ggplot(data.frame(Fitted=ols_fitted, Residuals=ols_resid), aes(x=Fitted, y=Residuals)) +
+  geom_point(alpha=0.5) +
+  geom_hline(yintercept=0, color="red") +
+  labs(title="OLS (Log) - Residuals vs Fitted (Totals)") +
+  theme_minimal()
+
+p_qq <- ggplot(data.frame(Residuals=ols_resid), aes(sample=Residuals)) +
+  stat_qq() +
+  stat_qq_line(color="red") +
+  labs(title="OLS (Log) - Q-Q Plot (Totals)") +
+  theme_minimal()
+
+grid.arrange(p_resid_fit, p_qq, ncol=2)
+
+```
+
+It's celar the fit even for OLS is "good" for the majority of the data, but there are some outliers which clearly do not follow the same distribution. This suggests that even the log transformation is not able to account well for all variations in our dataset. It is very likely that the high value players are simply too different from low/medium value players and their market values, cannot be predicted with the same linear model for everyone. 
+
+
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+# Extract cross-validation error data for Ridge
+set.seed(123)
+ridge_cv_data <- data.frame(
+  Lambda = cv_ridge_totals$lambda,
+  MeanError = cv_ridge_totals$cvm,
+  Upper = cv_ridge_totals$cvup,
+  Lower = cv_ridge_totals$cvlo
+)
+
+# Ridge CV Curve
+ggplot(ridge_cv_data, aes(x = log(Lambda), y = MeanError)) +
+  geom_line(color = "#2C7BB6", size = 1) +
+  geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.2, fill = "#2C7BB6") +
+  geom_vline(xintercept = log(cv_ridge_totals$lambda.min), linetype = "dashed", color = "red") +
+  labs(
+    title = "Ridge CV Curve (Totals, Log)",
+    x = "Log(Lambda)",
+    y = "Mean Cross-Validation Error"
+  ) +
+  theme_minimal(base_size = 10)
+
+# cross-validation error data for e net
+elnet_cv_data <- data.frame(
+  Lambda = cv_elnet_totals$lambda,
+  MeanError = cv_elnet_totals$cvm,
+  Upper = cv_elnet_totals$cvup,
+  Lower = cv_elnet_totals$cvlo
+)
+
+# Enet cv curve 
+ggplot(elnet_cv_data, aes(x = log(Lambda), y = MeanError)) +
+  geom_line(color = "#D7191C", size = 1) +
+  geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.2, fill = "#D7191C") +
+  geom_vline(xintercept = log(cv_elnet_totals$lambda.min), linetype = "dashed", color = "red") +
+  labs(
+    title = "Elastic Net CV Curve (Totals, Log)",
+    x = "Log(Lambda)",
+    y = "Mean Cross-Validation Error"
+  ) +
+  theme_minimal(base_size = 10)
+
+# Get cross-validation error data for Lasso
+lasso_cv_data <- data.frame(
+  Lambda = cv_lasso_totals$lambda,
+  MeanError = cv_lasso_totals$cvm,
+  Upper = cv_lasso_totals$cvup,
+  Lower = cv_lasso_totals$cvlo
+)
+
+# lasso cv curve 
+ggplot(lasso_cv_data, aes(x = log(Lambda), y = MeanError)) +
+  geom_line(color = "#FDAE61", size = 1) +
+  geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.2, fill = "#FDAE61") +
+  geom_vline(xintercept = log(cv_lasso_totals$lambda.min), linetype = "dashed", color = "red") +
+  labs(
+    title = "Lasso CV Curve (Totals, Log)",
+    x = "Log(Lambda)",
+    y = "Mean Cross-Validation Error"
+  ) +
+  theme_minimal(base_size = 10)
+
+```
+The optimal lamdba for all models is extremely small (indicated by the red dashed line)
+
+
+
+
+
+
