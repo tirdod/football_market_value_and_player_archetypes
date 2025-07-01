@@ -52,18 +52,18 @@ library(modeldata)
 ```{r, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
 set.seed(123)
 # Load the prepared datasets - 90s 
-X_train_90s <- read_csv("train_test_data/X_train_90s.csv", show_col_types = FALSE)[,-1]
-y_train_90s <- as.numeric(unlist(read_csv("train_test_data/y_train_90s.csv", show_col_types = FALSE)[,-1]))
+X_train_90s <- read_csv("X_train_90s.csv", show_col_types = FALSE)[,-1]
+y_train_90s <- as.numeric(unlist(read_csv("y_train_90s.csv", show_col_types = FALSE)[,-1]))
 
-X_test_90s <- read_csv("train_test_data/X_test_90s.csv", show_col_types = FALSE)[,-1]
-y_test_90s <- as.numeric(unlist(read_csv("train_test_data/y_test_90s.csv", show_col_types = FALSE)[,-1]))
+X_test_90s <- read_csv("X_test_90s.csv", show_col_types = FALSE)[,-1]
+y_test_90s <- as.numeric(unlist(read_csv("y_test_90s.csv", show_col_types = FALSE)[,-1]))
 
 # Load the prepared datasets - totals
-X_train_totals <- read_csv("train_test_data/X_train_totals.csv", show_col_types = FALSE)[,-1]
-y_train_totals <- as.numeric(unlist(read_csv("train_test_data/y_train_totals.csv", show_col_types = FALSE)[,-1]))
+X_train_totals <- read_csv("X_train_totals.csv", show_col_types = FALSE)[,-1]
+y_train_totals <- as.numeric(unlist(read_csv("y_train_totals.csv", show_col_types = FALSE)[,-1]))
 
-X_test_totals <- read_csv("train_test_data/X_test_totals.csv", show_col_types = FALSE)[,-1]
-y_test_totals <- as.numeric(unlist(read_csv("train_test_data/y_test_totals.csv", show_col_types = FALSE)[,-1]))
+X_test_totals <- read_csv("X_test_totals.csv", show_col_types = FALSE)[,-1]
+y_test_totals <- as.numeric(unlist(read_csv("y_test_totals.csv", show_col_types = FALSE)[,-1]))
 
 # Replace dashes with underscores in column names for consistency
 colnames(X_train_90s) <- gsub("-", "_", colnames(X_train_90s))
@@ -184,6 +184,23 @@ summary_targets <- data.frame(
 )
 
 print(summary_targets)
+
+```
+
+
+``` {r}
+
+# Extract mean and std from preprocessing
+age_mean <- preProc_totals$mean["age"]
+age_sd <- preProc_totals$std["age"]
+
+# Coefficients from Adaptive Lasso 
+coef_age <- 1.37
+coef_age2 <- -1.88
+
+# Compute age where market value is estimated to peak
+peak_age <- age_mean + (-coef_age / (2 * coef_age2)) * age_sd
+print(paste("Estimated peak market value occurs around age:", round(peak_age, 2)))
 
 ```
 
