@@ -40,10 +40,10 @@ Below is a summary of how our different models performed on our "Per 90s" datase
 
 Below is a brief analysis of some of the notable coefficients. Covariate weight values are included within the parentheses.
 
-- Age (1.37) and Age² (-1.88) have a concave relationship. Value rises with age up to a certain point, then declines. Upon further investigation, this "peak age" point is when a player is 27 years old.
-- Playing time (0.14), goals (0.11), and xG (0.10) were strong positive predictors, emphasizing performance output. Defensive metrics like Tackles Won (-0.04) and Interceptions had weak or negative influence, reflecting market bias toward offensive output. This is further supported by being a Forward or Midfielder (both 0.11) positively influencing market value.
-- Progressive Passes (0.12) and Successful Take-Ons (0.09) highlighted the value of creativity and ball progression.
-- Player club (0.65) has a major impact on a player's market valuation. However, this is partly due to reputational and financial biases in Transfermarkt's valuations. When a young player from a small club moves to a big club, we observe the player's market value skyrocket, even in the absence of any performance change. This highlights the importance of incorporating both market value and on-pitch value in player analysis.
+- Age and Age² have a concave relationship. Value rises with age up to a certain point, then declines. Upon further investigation, this "peak age" point is when a player is 27 years old.
+- Playing time, goals, and xG were strong positive predictors, emphasizing performance output. Defensive metrics like Tackles Won and Interceptions had weak or negative influence, reflecting market bias toward offensive output. This is further supported by being a Forward or Midfielder positively influencing market value.
+- Progressive Passes and Successful Take-Ons highlighted the value of creativity and ball progression on market value.
+- Player club has a major impact on a player's market valuation. However, this is partly due to reputational and financial biases in Transfermarkt's crowd-sourced valuations. When a young player from a small club moves to a big club, we observe the player's market value skyrocket, even in the absence of any performance change. This highlights the importance of incorporating both on-pitch value into player market value analysis.
 
 Intuitively, we see our results confirm how young, attacking players who receive suitable playing time are strong performance-based indicators of market value. 
 
@@ -135,6 +135,8 @@ as a starting point for understanding a player’s role, style, and profile.
 ## Opportunities for Future Research
 - Trying to predict a player’s market value by estimating the player’s on-field value,
 then leveraging latent variable analysis to uncover hidden features which influence a player’s market value.
+- Understanding what are the similarities between players who might not be receiving much playing time
+at their current club who break out and excel at a different club.
 - Building separate models to predict market valuations for defenders, midfielders, and forwards,
 leveraging insights from our Sparse PCA to guide parameter tuning.
 
