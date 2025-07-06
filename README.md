@@ -6,17 +6,32 @@ This project investigates two key questions:
 - What statistical indicators best predict a player's market value?
 - Can we use unsupervised learning to identify player archetypes?
 
-## Objective
+## Motivation
 
 **Player Market Value:**
 We aim to predict the market values of football players in the top five
-European leagues from the 2019/20 through the 2022/23 seasons. 
-We utilize various regression and penalization techniques such as Ordinary Least Squares,
-LASSO, Ridge, Elastic Net, and Adaptive LASSO.
+European leagues from the 2019/20 through the 2022/23 seasons. This project
+investigates which on-pitch performance metrics, such as goals and assists, are
+most predictive of a player's estimated value on the open market. This allows us
+to understand what truly drives player worth, and how each player's performance
+metrics impact his valuation. An analytical understanding of a player's market value 
+and a data-driven recruitment strategy adds context and leads to more informed decision making.
+
+While this project only investigates market value, market value should always be used in tandem 
+with on-pitch value. Using both metrics in tandem can help us understand whether a player is undervalued, 
+overvalued, or fairly priced. The use of up-to-date performance with future projections, an 
+organization is now able to understand the current scope of prospective transfers, while 
+also better understanding how the transfer could age over time and the potential re-sale value of the player.
 
 **Player Archetype Classification:**
-We explore unsupervised learning techniques such as K-Means Clustering,
-PCA, and Sparse PCA to assign players into different archetype buckets.
+
+Beyond just pure valuation, understanding the style of a player and his contributions to winning
+is vital. Beyond just using positions (ex. central midfielder), we can study player archetypes 
+to exactly what a player is bringing to the table (ex. box to box midfielder, playmaking midfielder,
+ball-winning midfielder). This type of analysis can unearth subtleties to a player's game, and help teams
+understand what kind of player it desires in different roles, and then understanding who the best options
+on the marketplace are for that role. It allows us to bridge the gap between raw intuition
+and provide substantive player profile analysis.
 
 ## Data
 This project integrates two publicly available datasets from Kaggle, 
@@ -27,18 +42,6 @@ integrating FBref and Transfermarkt data:
 ## Results
 
 **Player Market Value**
-
-Below is a summary of how our different models performed on our "Per 90s" dataset.
-
-| Model               | RMSE | R² | BIC   |
-|---------------------|------------|----------|-------------|
-| OLS (log)           | 0.6462     | 0.7171   | 10473.238   |
-| Ridge (log)         | 0.6602     | 0.7047   | -3532.034   |
-| Lasso (log)         | 0.6462     | 0.7171   | -3797.360   |
-| Elastic Net (log)   | 0.6462     | 0.7171   | -3797.441   |
-| **Adaptive Lasso (log)** | **0.6460** | **0.7173** | **-3854.222** |
-
-Below is a brief analysis of some of the notable coefficients. Covariate weight values are included within the parentheses.
 
 - Age and Age² have a concave relationship. Value rises with age up to a certain point, then declines. Upon further investigation, this "peak age" point is when a player is 27 years old.
 - Playing time, goals, and xG were strong positive predictors, emphasizing performance output. Defensive metrics like Tackles Won and Interceptions had weak or negative influence, reflecting market bias toward offensive output. This is further supported by being a Forward or Midfielder positively influencing market value.
@@ -140,7 +143,6 @@ then leveraging latent variable analysis to uncover hidden features which influe
 at their current club who break out and excel at a different club.
 - Building separate models to predict market valuations for defenders, midfielders, and forwards,
 leveraging insights from our Sparse PCA to guide parameter tuning.
-
-
-
-
+- Understanding what are the "swing skills" between positive and negative
+future outcomes for a given player. Can we model the range of outcomes for
+the swing skills?
