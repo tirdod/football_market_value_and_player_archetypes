@@ -43,7 +43,7 @@ Below is a brief analysis of some of the notable coefficients. Covariate weight 
 - Age and Age² have a concave relationship. Value rises with age up to a certain point, then declines. Upon further investigation, this "peak age" point is when a player is 27 years old.
 - Playing time, goals, and xG were strong positive predictors, emphasizing performance output. Defensive metrics like Tackles Won and Interceptions had weak or negative influence, reflecting market bias toward offensive output. This is further supported by being a Forward or Midfielder positively influencing market value.
 - Progressive Passes and Successful Take-Ons highlighted the value of creativity and ball progression on market value.
-- Player club has a major impact on a player's market valuation. However, this is partly due to reputational and financial biases in Transfermarkt's crowd-sourced valuations. When a young player from a small club moves to a big club, we observe the player's market value skyrocket, even in the absence of any performance change. This highlights the importance of incorporating both on-pitch value into player market value analysis.
+- Player club has a major impact on a player's market valuation. However, this is partly due to reputational and financial biases in Transfermarkt's valuations. When a young player from a small club moves to a big club, we observe the player's market value skyrocket, even in the absence of any performance change. This highlights the importance of incorporating  on-pitch value into player market value analysis.
 
 Intuitively, we see our results confirm how young, attacking players who receive suitable playing time are strong performance-based indicators of market value. 
 
