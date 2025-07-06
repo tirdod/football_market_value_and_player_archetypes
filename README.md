@@ -9,6 +9,7 @@ This project investigates two key questions:
 ## Motivation
 
 **Player Market Value:**
+
 We aim to predict the market values of football players in the top five
 European leagues from the 2019/20 through the 2022/23 seasons. This project
 investigates which on-pitch performance metrics, such as goals and assists, are
@@ -43,7 +44,7 @@ integrating FBref and Transfermarkt data:
 
 **Player Market Value**
 
-- Age and Age² have a concave relationship. Value rises with age up to a certain point, then declines. Upon further investigation, this "peak age" point is when a player is 27 years old.
+- Value rises with age up to a certain point, then declines. Upon further investigation, this "peak age" point is when a player is 27 years old.
 - Playing time, goals, and xG were strong positive predictors, emphasizing performance output. Defensive metrics like Tackles Won and Interceptions had weak or negative influence, reflecting market bias toward offensive output. This is further supported by being a Forward or Midfielder positively influencing market value.
 - Progressive Passes and Successful Take-Ons highlighted the value of creativity and ball progression on market value.
 - Player club has a major impact on a player's market valuation. However, this is partly due to reputational and financial biases in Transfermarkt's valuations. When a young player from a small club moves to a big club, we observe the player's market value skyrocket, even in the absence of any performance change. This highlights the importance of incorporating  on-pitch value into player market value analysis.
