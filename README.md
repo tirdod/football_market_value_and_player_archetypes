@@ -36,7 +36,7 @@ Below is a summary of how our different models performed on our "Per 90s" datase
 | Ridge (log)         | 0.6602     | 0.7047   | -3532.034   |
 | Lasso (log)         | 0.6462     | 0.7171   | -3797.360   |
 | Elastic Net (log)   | 0.6462     | 0.7171   | -3797.441   |
-| **Adaptive Lasso** (log) | **0.6460** | **0.7173** | **-3854.222** |
+| **Adaptive Lasso (log)** | **0.6460** | **0.7173** | **-3854.222** |
 
 Below is a brief analysis of some of the notable coefficients. Covariate weight values are included within the parentheses.
 
@@ -47,9 +47,10 @@ Below is a brief analysis of some of the notable coefficients. Covariate weight 
 
 Intuitively, we see our results confirm how young, attacking players who receive suitable playing time are strong performance-based indicators of market value. 
 
-While our models explain a sizable portion of variance (R² ≈ 0.71), there are many latent, unobserved variables such as agent influence, social media presence, player wages, or medical history that contribute the residual noise. Future research could improve predictive power by incorporating transfer history, wage data, or clustering position-specific player groups in the market value model.
+While our models explain a sizable portion of variance (R² ≈ 0.71), there are many latent, unobserved variables such as agent influence, social media presence, player wages, or medical history that contribute to the residual noise in player market valuation. Future research could improve predictive power by incorporating transfer history, wage data, or clustering position-specific player groups in the market value model.
 
-**Player Archetype Classification**
+**Player Archetype Classification:**
+
 While K-means clustering struggled, PCA and Sparse PCA showed promise in their ability to reduce dimensionality and separate players into archetypes. Sparse PCA was able to identify four easily interpretable principal components.
 
 <table>
