@@ -73,7 +73,7 @@ Some sample player archetype player plots are included below:
     <td><img src="images/st_mbappe_2022_23.png" alt="Kylian Mbappe" width="200" /></td>
   </tr>
   <tr>
-    <td><img src="images/messi_2020_21.png" alt="Leo Messi" width="200" /></td>
+    <td><img src="images/am_messi_2020_21.png" alt="Leo Messi" width="200" /></td>
     <td><img src="images/w_neymar_2019_20.png" alt="Neymar" width="200" /></td>
   </tr>
   <tr>
