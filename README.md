@@ -55,87 +55,20 @@ While our models explain a sizable portion of variance (R² ≈ 0.71), there are
 
 **Player Archetype Classification:**
 
-While K-means clustering struggled, PCA and Sparse PCA showed promise in their ability to reduce dimensionality and separate players into archetypes. Sparse PCA was able to identify four easily interpretable principal components.
+While K-means clustering struggled, PCA and Sparse PCA showed promise in their ability to reduce dimensionality and separate players into archetypes. Sparse PCA was able to identify seven interpretable player archetypes.
 
-<table>
-  <tr>
-    <td valign="top" style="padding-right:2em; vertical-align:top;">
-      <strong>Principal Component 1 (Playmaking)</strong>
-      <table>
-        <thead>
-          <tr><th align="left">Variable</th><th align="right">Loading Score</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>key_passes</td><td align="right">0.6004</td></tr>
-          <tr><td>progressive_carries</td><td align="right">0.5073</td></tr>
-          <tr><td>successful_take_ons</td><td align="right">0.3998</td></tr>
-          <tr><td>assist</td><td align="right">0.3371</td></tr>
-          <tr><td>fouled</td><td align="right">0.2287</td></tr>
-          <tr><td>progressive_passes</td><td align="right">0.1832</td></tr>
-          <tr><td>expected_assist</td><td align="right">0.1480</td></tr>
-          <tr><td>aerial_duels_won</td><td align="right">-0.0289</td></tr>
-        </tbody>
-      </table>
-    </td>
-    <td valign="top" style="padding-left:2em; vertical-align:top;">
-      <strong>Principal Component 2 (Defending)</strong>
-      <table>
-        <thead>
-          <tr><th align="left">Variable</th><th align="right">Loading Score</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>clearance</td><td align="right">-0.5350</td></tr>
-          <tr><td>interception</td><td align="right">-0.4729</td></tr>
-          <tr><td>blocks</td><td align="right">-0.3887</td></tr>
-          <tr><td>tackles_won</td><td align="right">-0.3441</td></tr>
-          <tr><td>playing_time_min</td><td align="right">-0.3412</td></tr>
-          <tr><td>aerial_duels_won</td><td align="right">-0.2475</td></tr>
-          <tr><td>error</td><td align="right">-0.1588</td></tr>
-          <tr><td>progressive_passes</td><td align="right">-0.1332</td></tr>
-        </tbody>
-      </table>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top" style="padding-right:2em; vertical-align:top;">
-      <strong>Principal Component 3 (Goalscorers)</strong>
-      <table>
-        <thead>
-          <tr><th align="left">Variable</th><th align="right">Loading Score</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>expected_goals</td><td align="right">0.7547</td></tr>
-          <tr><td>standard_goals</td><td align="right">0.4849</td></tr>
-          <tr><td>standard_pk</td><td align="right">0.4043</td></tr>
-          <tr><td>is_Forward</td><td align="right">0.1367</td></tr>
-          <tr><td>aerial_duels_won</td><td align="right">0.1100</td></tr>
-          <tr><td>fouls_drawn</td><td align="right">0.0313</td></tr>
-        </tbody>
-      </table>
-    </td>
-    <td valign="top" style="padding-left:2em; vertical-align:top;">
-      <strong>Principal Component 4 (Age)</strong>
-      <table>
-        <thead>
-          <tr><th align="left">Variable</th><th align="right">Loading Score</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>age</td><td align="right">-0.7256</td></tr>
-          <tr><td>age_squared</td><td align="right">-0.6881</td></tr>
-        </tbody>
-      </table>
-    </td>
-  </tr>
-</table>
+- **Anchor**: Back-line defenders who sweep up opponent attacks. Key metrics include tackles, blocked shots, fouls, clearances, miscontrols, and dispossessions.
+- **Ball Progressor**: Deep lying playmakers who control the tempo and build up from deep positions. Key metrics include forward passes, touches in middle third, carries, short passes, and medium distance passes.
+- **Ball Winner**: Players who break up play and win the ball. Key metrics include passe blocked, loose ball recoveries, interceptions, and dribblers tackled.
+- **Wide Playmaker**: Creators from wide areas. Key metrics include crosses, passes into penalty area, and passes leading to shots.
+- **Dribbler**: Players who take opponents off the dribble. Key metrics include successful take ons, progressive carries, carries into the penalty area, and carries into the final third
+- **Advanced Playmaker**: Players who create shooting opportunities for others. Key metrics include key passes, assists, and expected assists.
+- **Finisher**: Goal scorers. Key metrics include goals, expected goals, and shots on target.
 
-We can leverage the principal components and use the loading scores to derive player
-archetypes. For instance:
-- High PC1, High PC2, High PC3, High PC4: Creative, young forwards
-- High PC1, Low PC2, Low PC3, High PC4: Creative, young midfielders
-- Low PC1, Low PC2, Low PC3, Low PC4: Defensive veterans
+Some sample player archetype player plots are included below:
 
-As we can see, the interactions between the sparse principal components serve 
-as a starting point for understanding a player’s role, style, and profile.
+<img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/a4bcf251-3c69-44f8-b312-100d9b6438da" />
+
 
 ## Opportunities for Future Research
 - Trying to predict a player’s market value by estimating the player’s on-field value,
