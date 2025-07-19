@@ -1,0 +1,684 @@
+---
+title: "Player Analysis: Sparse PCA"
+author: "Tirdod Behbehani"
+date: "19.12.2024"
+format: 
+  pdf:
+    keep-tex: true
+    include-in-header: 
+       text: |
+         \usepackage{fvextra}
+         \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+         \DefineVerbatimEnvironment{OutputCode}{Verbatim}{breaklines,commandchars=\\\{\}}
+---
+
+# 1. Introduction
+This document explores player data using K-means clustering and PCA to understand if there is any structure in the data that can inform market value predictions. 
+
+---
+
+# Data Import and Preparation
+
+## Load Required Libraries
+```{r setup, include=TRUE}
+# Load libraries
+library(tidyverse)    # Data manipulation and visualization
+library(cluster)      # Clustering algorithms
+library(factoextra)   # Visualization for clustering
+library(broom)        # Tidy model outputs
+library(knitr)        # Pretty tables
+library(dplyr)
+library(gridExtra) # multiple plotting with ggplot2
+library(mclust) # clustering with mixture model
+library(gclus) # Clustering Graphics package
+library(car)
+library(corrplot)      # Install corrplot if not already installed
+library(ggcorrplot)    # Install ggcorrplot if not already installed
+library(elasticnet)
+library(PMA)
+library(cowplot)
+library(caret)
+```
+
+## Import data
+```{r}
+
+#Import data
+per90s_with_names <- read_csv('merged_90s_cleaned.csv')#[ , -1]
+totals_with_names <- read_csv('merged_total_cleaned.csv')#[ , -1]
+ 
+per90s <- per90s_with_names[, -(1:8)]
+totals <- totals_with_names[, -(1:8)]
+
+
+```
+
+look at correlation matrix
+```{r}
+# Compute the correlation matrix (for totals)
+cor_matrix <- cor(per90s, use = "complete.obs")  
+
+# Find highly correlated pairs (threshold = 0.8)
+threshold <- 0.75
+high_cor_pairs <- which(abs(cor_matrix) > threshold, arr.ind = TRUE)
+
+# Exclude self-correlations (correlation of a variable with itself)
+high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
+
+# Create a df of highly correlated pairs
+high_cor_df <- data.frame(
+  Var1 = rownames(cor_matrix)[high_cor_pairs[, 1]],
+  Var2 = colnames(cor_matrix)[high_cor_pairs[, 2]],
+  Correlation = cor_matrix[high_cor_pairs]
+)
+
+# Remove duplicate pairs 
+high_cor_df <- high_cor_df[!duplicated(t(apply(high_cor_df, 1, sort))), ]
+
+high_cor_df <- high_cor_df[order(-high_cor_df$Correlation), ]
+
+# Print the highly correlated pairs
+print("Highly Correlated Pairs:")
+print(high_cor_df)
+
+#now we remove highly correlated columns from the 90s df:
+per90s_clean <- per90s[, !(names(per90s) %in% c("short_pass_att_per90", "medium_pass_att_per90", "long_pass_att_per90","all_pass_att_per90",
+                              "pk_gls_per90", "pk_att_per90","npxg_minus_xg_per90","npxg_per90","take_ons_att_per90",
+                              "sca_per90","sca_live_ball_pass_per90", "sca_dead_ball_pass_per90", "sca_shot_per90",
+                              "sca_fouled_per90", "sca_defensive_per90",
+                              "sca_take_on_per90","gca_take_on_per90",
+                              "gca_per90","gca_live_ball_pass_per90", "gca_dead_ball_pass_per90", "gca_shot_per90",
+                              "gca_fouled_per90", "gca_defensive_per90",
+                              "tkl_att_per90","total_pass_cmp%","aerial_duels_att_per90","touches_def_pen_area_per90",
+                              "touches_pen_area_per90",
+                              "shots_on_target_per90","all_pass_cmp_per90","xa_per90","goals_per_shot_on_target",
+                              "drbl_tkl_attempted_per90",
+                              "npxg_per_shot_per90","blocks_per90","goals_per_shot","average_shot_distance_meters",
+                              "crosses_per90"
+                              ))]
+
+# Compute the correlation matrix (for totals)
+cor_matrix <- cor(per90s_clean, use = "complete.obs")  
+
+# Find highly correlated pairs (threshold = 0.8)
+threshold <- 0.75
+high_cor_pairs <- which(abs(cor_matrix) > threshold, arr.ind = TRUE)
+
+# Exclude self-correlations (correlation of a variable with itself)
+high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
+
+# Create a df of highly correlated pairs
+high_cor_df <- data.frame(
+  Var1 = rownames(cor_matrix)[high_cor_pairs[, 1]],
+  Var2 = colnames(cor_matrix)[high_cor_pairs[, 2]],
+  Correlation = cor_matrix[high_cor_pairs]
+)
+
+# Remove duplicate pairs 
+high_cor_df <- high_cor_df[!duplicated(t(apply(high_cor_df, 1, sort))), ]
+
+high_cor_df <- high_cor_df[order(-high_cor_df$Correlation), ]
+
+# Print the highly correlated pairs
+print("Highly Correlated Pairs:")
+print(high_cor_df)
+
+```
+
+## perform train and test split and preprocess data
+
+
+```{r split-and-preprocess}
+
+# set.seed(42)
+# 
+# # 1) Split on raw per90s_clean
+# per90s_index   <- createDataPartition(1:nrow(per90s_clean), p = 0.8, list = FALSE)
+# train_per90 <- per90s_clean[ train_idx, ]
+# test_per90  <- per90s_clean[-train_idx, ]
+
+```
+
+
+
+check if there are any variables with suspicious distributions
+``` {r}
+library(e1071)  # for skewness and kurtosis
+
+# Flag variables with problematic distributions
+check_distributions <- function(df) {
+  results <- data.frame(
+    metric = colnames(df),
+    skewness = apply(df, 2, skewness, na.rm = TRUE),
+    kurtosis = apply(df, 2, kurtosis, na.rm = TRUE),
+    sd = apply(df, 2, sd, na.rm = TRUE)
+  )
+
+  # Set thresholds for flagging
+  results$flag_skewness <- abs(results$skewness) > 2
+  results$flag_kurtosis <- results$kurtosis > 7
+  results$flag_low_variance <- results$sd < 0.01
+  results$flag_high_sd <- results$sd > 3
+
+  # Combine flags
+  results$red_flag <- with(results, flag_skewness | flag_kurtosis | flag_low_variance | flag_high_sd)
+
+  return(results[results$red_flag == TRUE, ])
+}
+
+# Run on your scaled training set
+red_flags <- check_distributions(per90s_clean)
+
+# Print flagged metrics
+print(red_flags)
+```
+
+``` {r}
+
+# turn the errors leading the shots to just flag the 10% of players with the most errors
+# Step 1: Compute 90th percentile threshold
+threshold_90 <- quantile(per90s_clean$error_leading_to_shot_per90, probs = 0.90, na.rm = TRUE)
+
+# Step 2: Create flag column for top 10%
+per90s_clean$high_error_flag <- per90s_clean$error_leading_to_shot_per90 >= threshold_90
+per90s_clean$error_leading_to_shot_per90 <- NULL
+
+# test_per90$high_error_flag  <- test_per90$error_leading_to_shot_per90  >= threshold_90
+# test_per90$error_leading_to_shot_per90  <- NULL
+
+## 3) Compute 99th‐pct caps on train & apply to both
+
+# the three columns you intend to winsorize:
+want_to_cap <- c(
+  "crosses_into_penalty_area_per90",
+  "carries_into_pen_area_per90",
+  "aerial_duels_won_per90"
+)
+
+# Only keep the ones that actually exist in train_per90
+cap_cols <- intersect(want_to_cap, names(per90s_clean))
+
+for(col in cap_cols) {
+  # 1) compute the 99th‐pctile 
+  cap <- quantile(per90s_clean[[col]], 0.99, na.rm=TRUE)
+  
+  # 2) in train & test, any value above cap → set to cap
+  per90s_clean[[col]][ per90s_clean[[col]] > cap ] <- cap
+  #test_per90[[col]][  test_per90[[col]] > cap ] <- cap
+}
+
+# 4) Fit scaler on train only, then transform both
+preProc_90s <- preProcess(per90s_clean, method = c("center","scale"))
+all_scaled  <- predict(preProc_90s, per90s_clean)
+#test_scaled   <- predict(preProc_90s, test_per90)
+
+# 5) Quick check
+summary(all_scaled)
+#summary(test_scaled)
+
+```
+
+
+## Tune and fit the sparse pca model
+```{r}
+
+# Use the training dataset directly
+X <- as.matrix(all_scaled)  # Training data (no further splitting)
+
+# Hyperparameter grids
+K_values <- c(1:7)  # Number of components to test
+lambda_values <- seq(0.05, 0.2, by = 0.05)  # Sparsity penalty values
+
+# A function to compute explained variance ratio
+explained_variance_ratio <- function(X_original_centered, loadings, scores) {
+  X_reconstructed <- scores %*% t(loadings)
+  
+  # Compute the variance explained by reconstructed data
+  var_explained <- sum(apply(X_reconstructed, 2, var))
+  
+  # Compute the total variance in the original centered data
+  var_total <- sum(apply(X_original_centered, 2, var))
+  
+  # Return the ratio of explained variance
+  var_explained / var_total
+}
+
+# Center the training dataset
+all_mean <- colMeans(X)
+X_centered <- sweep(X, 2, all_mean, FUN = "-")
+
+# Compute the covariance matrix of the centered training data
+#cov_matrix <- cov(X_centered)
+
+# Loop over hyperparameter combinations
+results <- data.frame(K = integer(), lambda = numeric(), ev_ratio = numeric())
+
+for (K in K_values) {
+  for (lambda in lambda_values) {
+    
+    # Fit Sparse PCA at (K, λ)
+    fit <- spca(X_centered,
+        K        = K,
+        type     = "predictor",
+        sparse   = "penalty",
+        para     = rep(lambda, K))
+    loadings <- fit$loadings
+    
+    scores <- X_centered %*% loadings  # Scores for the training set
+
+    # Compute explained variance ratio
+    ev <- explained_variance_ratio(X_centered, loadings, scores)
+    
+    # Store the results
+    results <- rbind(results, data.frame(K = K, lambda = lambda, ev_ratio = ev))
+  }
+}
+
+# Find the best (K, lambda) based on the highest explained variance
+best_params <- results[which.max(results$ev_ratio), ]
+print(best_params)
+
+# **Now** re-fit your final model once, outside the loops
+best_fit <- spca(X_centered,
+                  K      = best_params$K,
+                  type   = "predictor",
+                  sparse = "penalty",
+                  para   = rep(best_params$lambda, best_params$K))
+
+```
+
+
+taking the optimal lambda from above, now let's look at the explained variance for up to 25 principal components
+```{r}
+
+# lambda <- best_params$lambda
+# 
+# max_vars <- 25
+# 
+# ev_ratios <- numeric(max_vars)
+# 
+# for (K in 1:max_vars) {
+# 
+#   fit <- spca(X_centered, K = K, type = "predictor",
+#               sparse = "penalty", para = rep(lambda, K))
+#   ## Pull loadings from this fit, not the best_fit
+#   loadings <- fit$loadings
+#   
+#   scores <- X_centered %*% loadings
+#   
+#   # Compute explained variance ratio
+#   X_reconstructed <- scores %*% t(loadings)
+#   var_explained <- sum(apply(X_reconstructed, 2, var))
+#   var_total <- sum(apply(X_centered, 2, var))
+#   
+#   ev_ratio <- var_explained / var_total
+#   ev_ratios[K] <- ev_ratio
+#   
+#   # If we reach or exceed 100% (or very close), break out
+#   if (ev_ratio >= 1) {
+#     break
+#   }
+# }
+# 
+# # Filter out any trailing zeros if we broke early
+# ev_ratios <- ev_ratios[ev_ratios > 0]
+# 
+# # Create a data frame for plotting
+# df <- data.frame(
+#   K = 1:length(ev_ratios),
+#   ev_pct = ev_ratios * 100
+# )
+# 
+# ggplot(df, aes(x = K, y = ev_pct)) +
+#   geom_line(color = "steelblue", size = 1) +
+#   geom_point(size = 3, color = "steelblue") +
+#   # Add dashed lines at 70%, 80%, 90% for reference
+#   geom_hline(yintercept = c(70,80,90), linetype = "dashed", color = "red") +
+#   annotate("text", x = max(df$K) + 0.3, y = 70, label = "70%", vjust = -0.5, color = "red") +
+#   annotate("text", x = max(df$K) + 0.3, y = 80, label = "80%", vjust = -0.5, color = "red") +
+#   annotate("text", x = max(df$K) + 0.3, y = 90, label = "90%", vjust = -0.5, color = "red") +
+#   scale_x_continuous(breaks = seq(1, max(df$K), by = 1)) +
+#   scale_y_continuous(limits = c(0,100)) +
+#   labs(
+#     x = "Number of Components (K)",
+#     y = "Cumulative Explained Variance (%)",
+#     title = sprintf("Cumulative Explained Variance by SPCA (lambda = %.2f)", lambda)
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     panel.grid.minor = element_blank(),
+#     plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+#     axis.title = element_text(size = 11, face = "bold"),
+#     axis.text = element_text(size = 10)
+#   )
+# 
+# # Round to two decimals
+# df_table <- df %>% 
+#   dplyr::mutate(ev_pct = round(ev_pct, 2)) %>% 
+#   dplyr::rename(
+#     NumComponents      = K,
+#     CumulativeVariance = ev_pct
+#   )
+# 
+# # 2) Or a prettier table in RMarkdown
+# knitr::kable(
+#   df_table,
+#   caption = "Number of Components vs. Cumulative Explained Variance (%)",
+#   col.names = c("K", "Cum. Var. (%)"),
+#   digits = 2
+# )
+
+```
+
+
+```{r varimax-rotation}
+# 1) Grab the raw sparse‐PCA loadings for PCs 1–7
+rawL <- best_fit$loadings
+
+# 2) Apply an orthogonal Varimax rotation
+rot     <- varimax(rawL)
+rotL    <- rot$loadings        # rotated loadings matrix (p × 5)
+
+
+# 2) Build a data.frame with pairs of columns
+compare <- data.frame(
+  Metric    = rownames(rawL),
+  Raw_PC1   = round(rawL[,1], 3),
+  Rot_PC1   = round(rotL[,1], 3),
+  Raw_PC2   = round(rawL[,2], 3),
+  Rot_PC2   = round(rotL[,2], 3),
+  Raw_PC3   = round(rawL[,3], 3),
+  Rot_PC3   = round(rotL[,3], 3),
+  Raw_PC4   = round(rawL[,4], 3),
+  Rot_PC4   = round(rotL[,4], 3),
+  Raw_PC5   = round(rawL[,5], 3),
+  Rot_PC5   = round(rotL[,5], 3),
+  Raw_PC6   = round(rawL[,6], 3),
+  Rot_PC6   = round(rotL[,6], 3),
+  Raw_PC7   = round(rawL[,7], 3),
+  Rot_PC7   = round(rotL[,7], 3),
+  check.names = FALSE
+)
+
+# 3) Print with knitr::kable
+library(knitr)
+kable(compare,
+      caption = "Unrotated vs Varimax‐Rotated SPCA Loadings (PC1–PC7)",
+      align = c("l", rep("r", 14)),
+      digits = 3)
+
+```
+
+
+
+## analyze principal component features 
+
+rotated
+``` {r}
+
+# 1) Extract the raw loadings for PCs 1:K_rot
+rawL <- best_fit$loadings[, 1:K]
+
+# 2) Apply orthogonal Varimax rotation
+rot      <- varimax(rawL)
+rotL     <- rot$loadings        # rotated loadings matrix (p × K_rot)
+
+
+# 3) compute the rotated scores: n×p  %*%  p×7  =  n×7
+scores_rot <- X_centered %*% rotL
+
+# Flip PC1 so that higher = more defender-type
+rotL[,1]       <- -rotL[,1]
+scores_rot[,1] <- -scores_rot[,1]
+
+# Flip PC5 so that higher = more dribbler-type
+rotL[,5]       <- -rotL[,5]
+scores_rot[,5] <- -scores_rot[,5]
+
+# Flip PC6 so that higher = more goalscorer-type
+rotL[,6]       <- -rotL[,6]
+scores_rot[,6] <- -scores_rot[,6]
+
+# 4) Print top 10 variables for each rotated PC
+L <- rotL
+K <- ncol(L)
+
+for (j in 1:K) {
+  cat("Top 10 variables for Rotated PC", j, ":\n")
+  
+  # order by absolute loading, descending
+  abs_loads <- sort(abs(L[, j]), decreasing = TRUE)
+  
+  # pick the top 10
+  top_vars <- names(abs_loads)[1:10]
+  
+  # build a small data.frame
+  df_top <- data.frame(
+    Variable = top_vars,
+    Loading  = round(L[top_vars, j], 3),
+    row.names = NULL
+  )
+  
+  print(df_top)
+  cat("\n")
+}
+
+```
+
+
+``` {r}
+# 4) name your archetypes in the same order as the PCs
+archetypes <- c(
+  "Anchor",
+  "Ball_Progressor",
+  "Ball_Winner",
+  "Wide_Playmaker",
+  "Dribbler",
+  "Finisher",
+  "Advanced_Playmaker"
+)
+
+player_scores <- as_tibble(scores_rot) %>%
+  setNames(archetypes) %>%
+  mutate(
+    player   = per90s_with_names$player,
+    team     = per90s_with_names$team,
+    season   = per90s_with_names$season,
+    league   = per90s_with_names$league,
+    nation   = per90s_with_names$nation,
+    pos      = per90s_with_names$pos,
+    age      = per90s_with_names$age,
+    `90s`    = per90s_with_names$`90s`    # <— backticks on both sides
+  ) %>%
+  select(player, team, season, league, nation, pos, age, `90s`, everything())
+
+# 5) take a look
+player_scores %>% slice(1:10)
+
+player_scores_norm <- player_scores %>%
+  # for each archetype column, do: (x – min) / (max – min) * 100
+  mutate(across(all_of(archetypes),
+                ~ (. - min(., na.rm = TRUE)) /
+                  (max(., na.rm = TRUE) - min(., na.rm = TRUE)) * 100))
+
+# Inspect the normalized scores
+player_scores_norm %>% slice(1:10)
+
+```
+
+
+draw radar / spider plots
+# ``` {r}
+# 
+# library(dplyr)
+# 
+# # Pick a single player (or filter multiple)
+# to_plot <- player_scores_norm %>% 
+#   filter(player == "Virgil van Dijk",
+#          season == "2019-2020")
+# 
+# # Extract just the archetype‐score columns
+# axes <- c("Anchor",
+#           "Finisher",
+#           "Playmaker",
+#           "Dribbler",
+#           "Wide_Playmaker",
+#           "Ball_Winner",
+#           "Ball_Progressor")
+# df_raw <- to_plot[ , axes ]
+# 
+# # Build an fmsb‐friendly DF: first row = max across axes, second = min
+# max_row <- rep(100, length(axes))
+# min_row <- rep(0,   length(axes))
+# radar_df <- rbind(max_row, min_row, df_raw)
+# colnames(radar_df) <- axes
+# 
+# ```
+
+
+``` {r}
+
+plot_player_archetype <- function(player_name, season_name,
+                                  axes = c("Anchor",
+                                           "Finisher",
+                                           "Advanced_Playmaker",
+                                           "Dribbler",
+                                           "Wide_Playmaker",
+                                           "Ball_Winner",
+                                           "Ball_Progressor"),
+                                  col_border = "#CE1141",
+                                  col_fill   = alpha("#CE1141", .3)) {
+  # 1) look up the row in your already‐built scores & meta tables
+  to_plot <- player_scores_norm %>%
+    filter(player == player_name, season == season_name)
+  if (nrow(to_plot) != 1) {
+    stop("Expected exactly one match for that player & season.")
+  }
+  md <- per90s_with_names %>%
+    filter(player == player_name, season == season_name) %>%
+    slice(1)
+  
+  # 2) build fmsb radar_df
+  df_raw  <- to_plot[ , axes]
+  radar_df <- rbind(
+    rep(100, length(axes)),
+    rep(0,   length(axes)),
+    df_raw
+  )
+  colnames(radar_df) <- axes
+  
+  # 3) set up plotting region
+  oldpar <- par(
+    mar       = c(0, 0, 0, 0),
+    oma       = c(0, 0, 0, 0),
+    plt       = c(0.08, 0.9, 0, 0.88),
+    font.axis = 2
+  )
+  
+  # 4) blank spider
+  radarchart(
+    radar_df,
+    axistype   = 0,
+    seg        = 4,
+    pcol       = col_border,
+    pfcol      = col_fill,
+    plwd       = 2,
+    plty       = 1,
+    cglcol     = "grey10",
+    cglty      = 1,
+    cglwd      = 0.8,
+    axislabcol = "grey10",
+    vlabels    = rep("", length(axes)),
+    vlcex      = 1.1,
+    calcex     = 0.7
+  )
+  
+  # 5) bolded archetype labels
+  N      <- length(axes)
+  angles <- seq(0, 2*pi, length.out = N+1)[- (N+1)] + pi/2
+  r0     <- 1.10
+  lbls   <- gsub("_", " ", axes)
+  lbls[lbls=="Advanced Playmaker"] <- "Advanced\nPlaymaker"
+    lbls[lbls=="Wide Playmaker"] <- "Wide\nPlaymaker"
+  for (i in seq_along(lbls)) {
+    xi <- cos(angles[i]) * r0
+    yi <- sin(angles[i]) * r0
+    # your custom nudges
+    if (lbls[i]=="Anchor")         yi <- yi + 0.05
+    if (lbls[i]=="Finisher")       { xi<-xi-0.1; yi<-yi+0.1 }
+    if (lbls[i]=="Ball Progressor"){ xi<-xi+0.2; yi<-yi+0.1 }
+    if (lbls[i]=="Advanced\nPlaymaker") {
+      xi <- xi - 0.15
+      yi <- yi - 0.15
+    }
+    if (lbls[i]== "Ball Winner")    { xi<-xi+0.18; yi<-yi-0.15 }
+    if (lbls[i] == "Dribbler") yi<-yi-0.05
+      if (lbls[i] == "Wide\nPlaymaker") yi<-yi-0.11
+    text(xi, yi, lbls[i], font=2, cex=1.1, adj=c(0.5,0.5))
+  }
+  
+  # 6) 25–100% ticks on every spoke, then one 0% in the middle
+  pct_vals <- c(0.25, 0.50, 0.75, 1.00)  # drop the 0
+  for (i in seq_along(angles)) {
+    for (p in pct_vals) {
+      # bump 25% and 50% rings a little so they don’t overlap:
+      if (abs(p - 0.25) < 1e-8) {
+        p_adj <- p + 0.075
+      } else if (abs(p - 0.50) < 1e-8) {
+        p_adj <- p + 0.03
+      } else if (abs(p - 0.75) < 1e-8) {
+        p_adj <- p - 0.02
+      } else {
+        p_adj <- p - 0.07  # push the outer ring labels slightly in
+      }
+      x <- cos(angles[i]) * p_adj
+      y <- sin(angles[i]) * p_adj
+      text(x, y, paste0(p*100, "%"),
+           cex   = 0.7,
+           col   = "grey10",
+           font  = 2,
+           adj   = c(0.5, 0.5))
+    }
+  }
+
+  # now add a single “0%” at the center
+  text(0, 0, "0%", cex = 0.7, col = "grey10", font = 2, adj = c(0.5, 0.5))
+  
+  # 7) three‐line bold title
+  main_expr <- bquote(
+    atop(
+      bold(.(player_name)),
+      atop(
+        .(paste0(md$team, " (", md$season, ")")),
+        "Age:"~.(md$age)
+      )
+    )
+  )
+  title(main = main_expr, adj=0, line=0,
+        cex.main=1.6, col.main="#333333", font.main=1)
+  
+  par(oldpar)
+}
+
+```
+
+``` {r}
+
+# ── Usage ─────────────────────────────────────────────────────────────────────
+plot_player_archetype("Virgil van Dijk", "2022-2023")
+
+plot_player_archetype("Cristiano Ronaldo", "2019-2020")
+
+plot_player_archetype("Rodri", "2021-2022")
+
+plot_player_archetype("Lionel Messi", "2019-2020")
+
+plot_player_archetype("Lionel Messi", "2020-2021")
+
+plot_player_archetype("Lionel Messi", "2021-2022")
+
+plot_player_archetype("Lionel Messi", "2022-2023")
+
+
+
+```
