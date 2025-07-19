@@ -77,7 +77,7 @@ Some sample player archetype player plots are included below:
 </p>
 <p align="center">
   <img src="images/dm_rodri_2021_22.png" alt="Rodri" width="400" />
-  <img src="images/fb_trent_2022_23.png" alt="Trent Alexander-Arnold" width="400" />
+  <img src="images/dm_busquets_2020_21.png" alt="Sergio Busquets" width="400" />
 </p>
 <p align="center">
   <img src="images/fb_davies_2020_21.png" alt="Alphonso Davies" width="400" />
