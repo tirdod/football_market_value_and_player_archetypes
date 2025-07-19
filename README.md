@@ -67,28 +67,26 @@ While K-means clustering struggled, PCA and Sparse PCA showed promise in their a
 
 Some sample player archetype player plots are included below:
 
-<table>
-  <tr>
-    <td><img src="images/st_haaland_2022_23.png" alt="Erling Haaland" width="200" /></td>
-    <td><img src="images/st_mbappe_2022_23.png" alt="Kylian Mbappe" width="200" /></td>
-  </tr>
-  <tr>
-    <td><img src="images/am_messi_2020_21.png" alt="Leo Messi" width="200" /></td>
-    <td><img src="images/w_neymar_2019_20.png" alt="Neymar" width="200" /></td>
-  </tr>
-  <tr>
-    <td><img src="images/dm_rodri_2021_22.png" alt="Rodri width="200" /></td>
-    <td><img src="images/dm_busquets_2020_21.png" alt="Sergio Busquets" width="200" /></td>
-  </tr>
-  <tr>
-    <td><img src="images/fb_davies_2020_21.png" alt="Alphonso Davies" width="200" /></td>
-    <td><img src="images/fb_trent_2022_23.png" alt="Trent Alexander-Arnold" width="200" /></td>
-  </tr>
-  <tr>
-    <td><img src="images/cb_thiago_silva_2022_23.png" alt="Thiago Silva" width="200" /></td>
-    <td><img src="images/cb_van_dijk_2022_23.png" alt="Virgil van Dijk" width="200" /></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="images/st_haaland_2022_23.png" alt="Erling Haaland" width="400" />
+  <img src="images/st_mbappe_2022_23.png" alt="Kylian Mbappe" width="400" />
+</p>
+<p align="center">
+  <img src="images/am_messi_2020_21.png" alt="Leo Messi" width="400" />
+  <img src="images/w_neymar_2019_20.png" alt="Neymar" width="400" />
+</p>
+<p align="center">
+  <img src="images/dm_rodri_2021_22.png" alt="Rodri" width="400" />
+  <img src="images/fb_trent_2022_23.png" alt="Trent Alexander-Arnold" width="400" />
+</p>
+<p align="center">
+  <img src="images/fb_davies_2020_21.png" alt="Alphonso Davies" width="400" />
+  <img src="images/fb_trent_2022_23.png" alt="Trent Alexander-Arnold" width="400" />
+</p>
+<p align="center">
+  <img src="images/cb_thiago_silva_2022_23.png" alt="Thiago Silva"  width="400" />
+  <img src="images/cb_van_dijk_2022_23.png" alt="Virgil van Dijk" width="400" />
+</p>
 
 ## Opportunities for Future Research
 - Trying to predict a player’s market value by estimating the player’s on-field value,
